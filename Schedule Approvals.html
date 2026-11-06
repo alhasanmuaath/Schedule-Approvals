@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schedule Approvals</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#F4F6FA;--card:#fff;--ink:#0F172A;--muted:#64748B;--line:#E2E8F0;
+  --ok:#047857;--ok-bg:#D1FAE5;--no:#BE123C;--no-bg:#FFE4E6;--wait:#B45309;--wait-bg:#FEF3C7;
+  --brand:#0B1F44;--accent:#E3B55B;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0E1424;--card:#161E33;--ink:#F1F5F9;--muted:#94A3B8;--line:#2A3552;
+  --ok:#6EE7B7;--ok-bg:#064E3B;--no:#FDA4AF;--no-bg:#4C0519;--wait:#FCD34D;--wait-bg:#451A03;--brand:#E3B55B;--accent:#E3B55B}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:26px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:34px 16px;text-align:center;background:var(--card);cursor:pointer}
+.drop.over{border-color:var(--accent);background:var(--wait-bg)}
+.drop b{font-size:18px;display:block;margin-bottom:6px}
+.drop span{color:var(--muted)}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+@media (prefers-color-scheme:dark){button.primary{color:#0E1424}}
+button.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+button.no{background:var(--no-bg);color:var(--no);border-color:transparent}
+button.on{outline:2px solid currentColor}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:16px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat small{color:var(--muted);display:block}
+.stat strong{font-size:22px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.chip{border-radius:999px;padding:6px 14px}
+.chip.sel{background:var(--brand);color:#fff;border-color:var(--brand)}
+@media (prefers-color-scheme:dark){.chip.sel{color:#0E1424}}
+.sp{flex:1}
+.group h3{margin:22px 0 8px;font-size:17px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.group h3 span{color:var(--muted);font-weight:400;font-size:14px}
+.row{display:grid;grid-template-columns:1.4fr 1fr .6fr auto;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px}
+.row .d{font-weight:600}
+.row .t{color:var(--muted)}
+.badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600}
+.badge.approved{background:var(--ok-bg);color:var(--ok)}
+.badge.rejected{background:var(--no-bg);color:var(--no)}
+.badge.pending{background:var(--wait-bg);color:var(--wait)}
+.acts{display:flex;gap:6px}
+.acts button{padding:6px 12px}
+@media (max-width:640px){
+  .row{grid-template-columns:1fr auto}
+  .row .t,.row .h{grid-column:1}
+  .acts{grid-column:1/3}
+  .acts button{flex:1}
+}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .h{font-size:12px;color:var(--muted);text-align:center;padding:4px 0}
+.cell{min-height:84px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px;font-size:12px;overflow:hidden}
+.cell.out{background:transparent;border-color:transparent}
+.cell .n{color:var(--muted);margin-bottom:2px}
+.ev{display:block;width:100%;text-align:left;border:0;border-radius:6px;padding:2px 5px;margin-bottom:2px;font-size:11px;line-height:1.25}
+.ev.approved{background:var(--ok-bg);color:var(--ok)}
+.ev.rejected{background:var(--no-bg);color:var(--no);text-decoration:line-through}
+.ev.pending{background:var(--wait-bg);color:var(--wait)}
+.note{color:var(--muted);font-size:13px;margin-top:14px}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+.err{background:var(--no-bg);color:var(--no);border-radius:10px;padding:10px 14px;margin:12px 0}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--brand);color:#fff;padding:10px 18px;border-radius:10px;opacity:0;transition:.2s;pointer-events:none}
+@media (prefers-color-scheme:dark){.toast{color:#0E1424}}
+.toast.show{opacity:1}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Schedule Approvals</h1>
+  <p class="sub">Upload the schedule file, review each date, then approve or reject it.</p>
+
+  <div id="err" class="err" hidden></div>
+
+  <label id="drop" class="drop" for="file">
+    <b>Upload your schedule file</b>
+    <span>Tap to choose an .xlsx or .csv file, or drop it here</span>
+    <input id="file" type="file" accept=".xlsx,.xls,.csv" hidden>
+  </label>
+
+  <div id="app" hidden>
+    <div class="bar">
+      <strong id="fname"></strong>
+      <span class="sp"></span>
+      <label class="btn" for="file2">Load another file</label>
+      <input id="file2" type="file" accept=".xlsx,.xls,.csv" hidden>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="card">
+      <div class="bar" id="people" style="margin-top:0"></div>
+      <div class="bar">
+        <button class="chip" data-st="all">All</button>
+        <button class="chip" data-st="approved">Approved</button>
+        <button class="chip" data-st="rejected">Rejected</button>
+        <button class="chip" data-st="pending">Pending</button>
+        <span class="sp"></span>
+        <button id="vList" class="chip">List</button>
+        <button id="vCal" class="chip">Calendar</button>
+      </div>
+      <div class="bar" style="margin-bottom:0">
+        <button class="ok" id="allOk">Approve all shown</button>
+        <button class="no" id="allNo">Reject all shown</button>
+        <button id="reset">Reset to file</button>
+        <span class="sp"></span>
+        <button class="primary" id="export">Download updated file</button>
+        <button id="copy">Copy approved dates</button>
+      </div>
+    </div>
+
+    <div id="list"></div>
+    <div id="calwrap" hidden>
+      <div class="bar">
+        <button id="prev">&larr;</button>
+        <strong id="mlabel"></strong>
+        <button id="next">&rarr;</button>
+        <span class="note">Tap a date chip to switch between approved and rejected.</span>
+      </div>
+      <div class="cal" id="cal"></div>
+    </div>
+    <p class="note">Your choices stay on this device until you download the updated file. Nothing is sent anywhere.</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var rows=[], rawCols=[], fileName='', filt={person:'all',status:'all'}, view='list', month=null;
+  var $=function(id){return document.getElementById(id)};
+  var storeKey='sched-approvals-v1';
+
+  function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1800)}
+  function showErr(m){var e=$('err');e.textContent=m;e.hidden=!m}
+  function pad(n){return (n<10?'0':'')+n}
+  function normDate(v){
+    if(v==null||v==='')return '';
+    if(typeof v==='number'){var o=XLSX.SSF.parse_date_code(v);return o.y+'-'+pad(o.m)+'-'+pad(o.d)}
+    if(v instanceof Date)return v.getFullYear()+'-'+pad(v.getMonth()+1)+'-'+pad(v.getDate());
+    var s=String(v).trim();var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m)return m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
+    var d=new Date(s);return isNaN(d)?s:d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  }
+  function normTime(v){
+    if(v==null||v==='')return '';
+    if(typeof v==='number'){var mins=Math.round((v%1)*1440);return pad(Math.floor(mins/60))+':'+pad(mins%60)}
+    var m=String(v).match(/(\d{1,2}):(\d{2})/);return m?pad(+m[1])+':'+m[2]:String(v);
+  }
+  function pretty(d){var x=new Date(d+'T00:00:00');return isNaN(x)?d:x.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'})}
+  function key(h){return String(h).trim().toLowerCase().replace(/[^a-z0-9]+/g,'_')}
+
+  function parse(buf,name){
+    showErr('');
+    try{
+      var wb=XLSX.read(buf,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var json=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+      if(!json.length){showErr('That file has no rows.');return}
+      rawCols=Object.keys(json[0]);
+      var map={};rawCols.forEach(function(c){map[key(c)]=c});
+      if(!map.date){showErr('I could not find a "date" column. Columns found: '+rawCols.join(', '));return}
+      fileName=name;
+      var saved=loadSaved();
+      rows=json.map(function(r,i){
+        var id=String(r[map.id]!=null&&r[map.id]!==''?r[map.id]:('row'+i));
+        var st=String(map.status?r[map.status]:'').toLowerCase().trim();
+        if(st!=='approved'&&st!=='rejected')st='pending';
+        var o={id:id,raw:r,map:map,
+          person:String(r[map.person]||r[map.name]||'Unknown'),
+          date:normDate(r[map.date]),
+          start:normTime(r[map.start_time]),end:normTime(r[map.end_time]),
+          hours:Number(r[map.hours])||0,orig:st,status:saved[id]||st};
+        return o;
+      }).filter(function(r){return r.date});
+      filt={person:'all',status:'all'};
+      var first=rows.map(function(r){return r.date}).sort()[0];
+      month=first?first.slice(0,7):null;
+      $('drop').hidden=true;$('app').hidden=false;$('fname').textContent=fileName;
+      render();
+    }catch(e){showErr('Could not read that file: '+e.message)}
+  }
+  function loadSaved(){try{var s=JSON.parse(localStorage.getItem(storeKey+':'+fileName)||'{}');return s}catch(e){return {}}}
+  function save(){try{var s={};rows.forEach(function(r){if(r.status!==r.orig)s[r.id]=r.status});localStorage.setItem(storeKey+':'+fileName,JSON.stringify(s))}catch(e){}}
+
+  function shown(){
+    return rows.filter(function(r){
+      return (filt.person==='all'||r.person===filt.person)&&(filt.status==='all'||r.status===filt.status);
+    }).sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:(a.start<b.start?-1:1)});
+  }
+  function setStatus(ids,st){
+    rows.forEach(function(r){if(ids.indexOf(r.id)>-1)r.status=st});
+    save();render();
+  }
+
+  function render(){
+    // stats
+    var c={approved:0,rejected:0,pending:0},hrs=0;
+    rows.forEach(function(r){c[r.status]++;if(r.status==='approved')hrs+=r.hours});
+    $('stats').innerHTML=
+      '<div class="stat"><small>Total dates</small><strong>'+rows.length+'</strong></div>'+
+      '<div class="stat"><small>Approved</small><strong style="color:var(--ok)">'+c.approved+'</strong></div>'+
+      '<div class="stat"><small>Rejected</small><strong style="color:var(--no)">'+c.rejected+'</strong></div>'+
+      '<div class="stat"><small>Pending</small><strong style="color:var(--wait)">'+c.pending+'</strong></div>'+
+      '<div class="stat"><small>Approved hours</small><strong>'+hrs+' h</strong></div>';
+    // people chips
+    var names=[];rows.forEach(function(r){if(names.indexOf(r.person)<0)names.push(r.person)});
+    var h='<button class="chip'+(filt.person==='all'?' sel':'')+'" data-p="all">Everyone</button>';
+    names.forEach(function(n){h+='<button class="chip'+(filt.person===n?' sel':'')+'" data-p="'+esc(n)+'">'+esc(n)+'</button>'});
+    $('people').innerHTML=h;
+    document.querySelectorAll('[data-st]').forEach(function(b){b.classList.toggle('sel',b.dataset.st===filt.status)});
+    $('vList').classList.toggle('sel',view==='list');$('vCal').classList.toggle('sel',view==='cal');
+    $('list').hidden=view!=='list';$('calwrap').hidden=view!=='cal';
+    if(view==='list')renderList();else renderCal();
+  }
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+  function renderList(){
+    var list=shown(),out='';
+    if(!list.length){$('list').innerHTML='<div class="empty">No dates match this filter.</div>';return}
+    var groups={};list.forEach(function(r){(groups[r.person]=groups[r.person]||[]).push(r)});
+    Object.keys(groups).forEach(function(p){
+      var g=groups[p],hh=0;g.forEach(function(r){if(r.status==='approved')hh+=r.hours});
+      out+='<div class="group"><h3>'+esc(p)+'<span>'+g.length+' dates · '+hh+' h approved</span></h3>';
+      g.forEach(function(r){
+        out+='<div class="row"><div class="d">'+pretty(r.date)+'</div>'+
+          '<div class="t">'+(r.start&&r.end?r.start+' – '+r.end:'')+'</div>'+
+          '<div class="h"><span class="badge '+r.status+'">'+r.status+'</span></div>'+
+          '<div class="acts"><button class="ok'+(r.status==='approved'?' on':'')+'" data-a="approved" data-id="'+esc(r.id)+'">Approve</button>'+
+          '<button class="no'+(r.status==='rejected'?' on':'')+'" data-a="rejected" data-id="'+esc(r.id)+'">Reject</button></div></div>';
+      });
+      out+='</div>';
+    });
+    $('list').innerHTML=out;
+  }
+
+  function renderCal(){
+    if(!month){$('cal').innerHTML='';return}
+    var y=+month.slice(0,4),m=+month.slice(5,7)-1;
+    $('mlabel').textContent=new Date(y,m,1).toLocaleDateString(undefined,{month:'long',year:'numeric'});
+    var first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate(),h='';
+    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){h+='<div class="h">'+d+'</div>'});
+    for(var i=0;i<first;i++)h+='<div class="cell out"></div>';
+    var list=shown();
+    for(var d=1;d<=days;d++){
+      var ds=y+'-'+pad(m+1)+'-'+pad(d);
+      h+='<div class="cell"><div class="n">'+d+'</div>';
+      list.filter(function(r){return r.date===ds}).forEach(function(r){
+        h+='<button class="ev '+r.status+'" data-tog="'+esc(r.id)+'">'+esc(r.person)+' '+r.start+'</button>';
+      });
+      h+='</div>';
+    }
+    $('cal').innerHTML=h;
+  }
+
+  // events
+  $('people').addEventListener('click',function(e){var p=e.target.dataset.p;if(p!=null){filt.person=p;render()}});
+  document.querySelectorAll('[data-st]').forEach(function(b){b.addEventListener('click',function(){filt.status=b.dataset.st;render()})});
+  $('vList').onclick=function(){view='list';render()};
+  $('vCal').onclick=function(){view='cal';render()};
+  $('list').addEventListener('click',function(e){var b=e.target.closest('[data-a]');if(!b)return;
+    var r=rows.filter(function(x){return x.id===b.dataset.id})[0];
+    setStatus([r.id],r.status===b.dataset.a?'pending':b.dataset.a)});
+  $('cal').addEventListener('click',function(e){var b=e.target.closest('[data-tog]');if(!b)return;
+    var r=rows.filter(function(x){return x.id===b.dataset.tog})[0];
+    setStatus([r.id],r.status==='approved'?'rejected':'approved')});
+  $('allOk').onclick=function(){var l=shown();setStatus(l.map(function(r){return r.id}),'approved');toast(l.length+' approved')};
+  $('allNo').onclick=function(){var l=shown();setStatus(l.map(function(r){return r.id}),'rejected');toast(l.length+' rejected')};
+  $('reset').onclick=function(){rows.forEach(function(r){r.status=r.orig});save();render();toast('Reset to the uploaded file')};
+  function shiftMonth(n){var y=+month.slice(0,4),m=+month.slice(5,7)-1+n;var d=new Date(y,m,1);month=d.getFullYear()+'-'+pad(d.getMonth()+1);render()}
+  $('prev').onclick=function(){shiftMonth(-1)};$('next').onclick=function(){shiftMonth(1)};
+
+  $('copy').onclick=function(){
+    var l=rows.filter(function(r){return r.status==='approved'}).sort(function(a,b){return a.person<b.person?-1:a.person>b.person?1:(a.date<b.date?-1:1)});
+    var txt=l.map(function(r){return r.person+'\t'+r.date+'\t'+r.start+'-'+r.end}).join('\n');
+    try{navigator.clipboard.writeText(txt).then(function(){toast('Copied '+l.length+' approved dates')},function(){toast('Copy was blocked')})}
+    catch(e){toast('Copy was blocked')}
+  };
+  var dl=null;
+  if(window.claude&&claude.use){claude.use('downloads').then(function(d){dl=d;if(!d)$('export').hidden=true},function(){$('export').hidden=true})}
+  $('export').onclick=function(){
+    if(!dl){toast('Download is not available here');return}
+    var out=rows.map(function(r){var o=Object.assign({},r.raw);if(r.map.status)o[r.map.status]=r.status;else o.status=r.status;return o});
+    var ws=XLSX.utils.json_to_sheet(out),wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Data');
+    var buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
+    var name=fileName.replace(/\.[^.]+$/,'')+'-reviewed.xlsx';
+    dl.save({filename:name,data:buf}).then(function(){toast('Saved')},function(e){if(!e||e.code!=='declined')toast('Could not save the file')});
+  };
+
+  function readFile(f){if(!f)return;var rd=new FileReader();rd.onload=function(){parse(rd.result,f.name)};rd.readAsArrayBuffer(f)}
+  $('file').onchange=function(e){readFile(e.target.files[0])};
+  $('file2').onchange=function(e){readFile(e.target.files[0])};
+  var dz=$('drop');
+  ['dragenter','dragover'].forEach(function(n){dz.addEventListener(n,function(e){e.preventDefault();dz.classList.add('over')})});
+  ['dragleave','drop'].forEach(function(n){dz.addEventListener(n,function(e){e.preventDefault();dz.classList.remove('over')})});
+  dz.addEventListener('drop',function(e){readFile(e.dataTransfer.files[0])});
+})();
+</script>
+</body>
+</html>
